@@ -189,3 +189,6 @@ I implemented some hedge functions in
 but I haven't figured
 out how to integrate these in to the system yet.
 
+
+[James Power](http://www.cs.nuim.ie/~jpower/),
+27 August 2018.
