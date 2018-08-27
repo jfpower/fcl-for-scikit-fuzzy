@@ -83,7 +83,7 @@ Dependencies
 ------------
 
 The scanner is written using
-[PLY](http://www.dabeaz.com/ply/ply.html),
+[PLY](http://www.dabeaz.com/ply/ply.html) (Python Lex-Yacc),
 so you need to install PLY before the code here will work.
 
      $ pip install ply
@@ -96,7 +96,8 @@ parser-generation features of PLY.
 What's implemented
 ------------------
 
-Basically the subset of FCL that can be translated easily into
+Much of FCL is implemented, concentrating on
+the subset of FCL that can be translated easily into
 `scikit-fuzzy`.  That includes most parts of a standard
 (Mamdani-style) fuzzy system.
 
@@ -111,13 +112,13 @@ At the moment the main options are for:
 I was doing this with an eye on the XML standard, hence the rather
 large selection of membership functions and norms.
 
-Most notably _not_ implemented (yet) are:
-  * activation methods (hard-wired to `MIN`)
-  * accumulation methods (hard-wired to `MAX`)
+Most notably _not_ implemented (yet) are options for:
+  * activation methods (this is hard-wired to `MIN`)
+  * accumulation methods (this is hard-wired to `MAX`)
   * default values for variables
 
 The parser accepts these, I just haven't figured out how to get them
-into the `scikit-fuzzy` code, so they will be ignored for the moment.
+into the `scikit-fuzzy` code, so they are ignored for the moment.
 
 Compliance
 ----------
@@ -125,19 +126,59 @@ Compliance
 First of all, I'm working from the draft of the FCL standard (IEC
 TC65/WG 7/TF8), plus any examples I could find, so I may have missed a
 few things.
-
 Second, the parser does not enforce strict conformance to the FCL standard,
 and is somewhat liberal in the kind of FCL code it will accept.
+This is intended as a feature, not a bug.
 
 In particular:
   * Case is not relevant for keywords
   (so `Rule`, `rule`, `RULE` are all the same)
-  but note that it is relevant for identifiers (e.g. variable names).
-  * The semi-colon at the end of lines can be left out in most cases
-  * The parser doesn't impose a strict ordering on the contents of (say)
+  but note that case _is_ relevant for identifiers (e.g. variable names).
+  * The semi-colon at the end of lines can be left out in most cases.
+  * The parser doesn't impose a strict ordering on the contents of 
   variable definitions, so you can mix `TERM`, `RANGE`, `METHOD`
   etc. in your preferred order.
 
+I only made one real change to the FCL language
+to better support `scikit-fuzzy`:
+  * When defining a variable range (universe) you can specify
+  the granularity using an optional `WITH` setting, thus:
+  ```
+  RANGE := (0 .. 2.1) WITH 0.01
+  ```
+  This maps directly to a NumPy `arange(1, 2.1, 0.01)` expression.
+
+This is due to the way `scikit-fuzzy` calculates its membership
+functions: these get worked out to point-lists when they are defined,
+so I need to know the granularity to get this right.
+
+This working-out is also the reason we can't really generate FCL from
+a `scikit-fuzzy` program, since the information on the original
+definition of the membership functions is not retained once the
+point-sets have been calculated.
 
 
+
+
+Reading the code
+----------------
+
+The main functionality is in (fcl_parser.py) which contains the
+hand-written top-down parser.  This is essentially a context-free
+grammar, with a Python method for each non-terminal.
+
+The scanner code is in [fcl_scanner.py].  This uses a few tricks related
+to PLY, but us essentially a list of regular expressions plus some
+extra code to check tokens etc.
+
+The symbol table is in fcl_symbols.py and contains a list of the
+variables and rules, added in as they are processed.  The mappings
+between option names (membership functions, defuzzification method
+etc.) is also kept here.
+
+The other files are simple auxiliary definitions: some extra
+membership functions (that are not in `scikit-fuzzy`) are defined in
+extramf.py and the t-norms and their duals are defined in norms.py.  I
+implemented some hedge functions in hedges.py but I haven't figured
+out how to integrate these in to the system yet.
 
