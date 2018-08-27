@@ -163,22 +163,29 @@ point-sets have been calculated.
 Reading the code
 ----------------
 
-The main functionality is in (fcl_parser.py) which contains the
+The main functionality is in [fcl_parser.py](./fcl_parser.py)
+which contains the
 hand-written top-down parser.  This is essentially a context-free
 grammar, with a Python method for each non-terminal.
 
-The scanner code is in [fcl_scanner.py].  This uses a few tricks related
+The scanner code is in [fcl_scanner.py](./fcl_scanner.py).
+This uses a few tricks related
 to PLY, but us essentially a list of regular expressions plus some
 extra code to check tokens etc.
 
-The symbol table is in fcl_symbols.py and contains a list of the
+The symbol table is in [fcl_symbols.py](./fcl_symbols.py)
+and contains a list of the
 variables and rules, added in as they are processed.  The mappings
 between option names (membership functions, defuzzification method
 etc.) is also kept here.
 
 The other files are simple auxiliary definitions: some extra
 membership functions (that are not in `scikit-fuzzy`) are defined in
-extramf.py and the t-norms and their duals are defined in norms.py.  I
-implemented some hedge functions in hedges.py but I haven't figured
+[extramf.py](./extramf.py)
+and the t-norms and their duals are defined in
+[norms.py](./norms.py).
+I implemented some hedge functions in
+[hedges.py](./hedges.py)
+but I haven't figured
 out how to integrate these in to the system yet.
 
