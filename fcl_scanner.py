@@ -331,7 +331,7 @@ def scan_dir(lexer, rootdir, silent=False):
 if __name__ == '__main__':
     _LEXER = FCLLexer()
     if len(sys.argv) == 1:  # No args, scan all examples
-        scan_dir(_LEXER, 'examples')
+        scan_dir(_LEXER, 'tests')
     else:  # Parse the given files:
         for fcl_filename in sys.argv[1:]:
             _LEXER.scan_file(fcl_filename)

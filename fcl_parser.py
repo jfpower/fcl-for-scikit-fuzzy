@@ -604,7 +604,7 @@ def parse_dir(parser, rootdir, want_output=False):
 if __name__ == '__main__':
     _parser = FCLParser()
     if len(sys.argv) == 1:  # No args, scan all examples
-        parse_dir(_parser, 'examples')
+        parse_dir(_parser, 'tests')
     else:  # Parse the given files:
         for fcl_filename in sys.argv[1:]:
             _parser.read_fcl_file(fcl_filename)

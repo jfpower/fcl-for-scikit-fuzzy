@@ -1,4 +1,4 @@
-FCL parser with a scikit-fuzzy back-end
+An FCL parser with a scikit-fuzzy back-end
 =======================================
 
 This is a parser for the Fuzzy Control Language
@@ -167,6 +167,13 @@ The main functionality is in [fcl_parser.py](./fcl_parser.py)
 which contains the
 hand-written top-down parser.  This is essentially a context-free
 grammar, with a Python method for each non-terminal.
+
+This can be called from the command-line if you just want to parse a file;
+for example:
+
+```
+$ python fcl_parser.py tests/tipper.fcl
+```
 
 The scanner code is in [fcl_scanner.py](./fcl_scanner.py).
 This uses a few tricks related
