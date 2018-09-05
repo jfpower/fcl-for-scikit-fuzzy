@@ -130,7 +130,7 @@ Most notably _not_ implemented (yet) are options for:
   rules, but this might cause unexpected behaviour if the variables
   are used in more than one rule base.
   
-  * default values for variables.
+* default values for variables.
 
   In FCL these values are used in defuzzification when all the
   memberships have been cut to zero area.  As far as I can see this
