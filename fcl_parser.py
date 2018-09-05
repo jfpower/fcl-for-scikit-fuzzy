@@ -54,6 +54,7 @@ class FCLParser(NameMapper, SymbolTable):
         NameMapper.__init__(self)
         self.load_ieee_names()
         self.load_fcl_names_too()
+        self.load_jfl_names()
         SymbolTable.__init__(self, vars)
         self.lex = BufferedFCLLexer(self._report_error)
 
@@ -493,10 +494,10 @@ class FCLParser(NameMapper, SymbolTable):
             condition_and ::= clause {('COMMA' | 'AND') clause}
             Assuming 'COMMA' is just another way of saying 'AND'
         '''
-        left = self.clause()
+        left = self.clause(parent_rule=self.antecedent)
         while self.lex.peek_some(['COMMA', 'AND']):
             self.lex.recognise_some(['COMMA', 'AND'])
-            right = self.clause()
+            right = self.clause(parent_rule=self.antecedent)
             left = fuzzterm.TermAggregate(left, right, 'and')
         return left
 
@@ -512,20 +513,25 @@ class FCLParser(NameMapper, SymbolTable):
             clist.append(self.clause())
         return clist
 
-    def clause(self, input_string=None):
+    def clause(self, input_string=None, parent_rule=None):
         '''
             clause ::=
                 | variable_name   # Not doing this!
                 | variable_name 'IS' {hedge} term_name
                 | 'NOT' '(' clause() ')'
+                | '(' clause() ')'  # Allow extra parentheses
             The optional hedge is any identifier or 'NOT'.
         '''
         self.lex.maybe_set_input(input_string)
         if self.lex.recognise_if_there('NOT'):
-            self.lex.recognise('LPAREN')
-            subclause = self.clause()
-            self.lex.recognise('RPAREN')
+            # self.lex.recognise('LPAREN')
+            subclause = parent_rule() if parent_rule else self.clause()
+            # self.lex.recognise('RPAREN')
             return fuzzterm.TermAggregate(subclause, None, 'not')
+        if self.lex.recognise_if_there('LPAREN'):
+            subclause = parent_rule() if parent_rule else self.clause()
+            self.lex.recognise('RPAREN')
+            return subclause
         # else: variable_name 'IS' {hedge} term_name
         varname = self.lex.recognise('IDENTIFIER')
         hedges = []
@@ -604,7 +610,7 @@ def parse_dir(parser, rootdir, want_output=False):
 if __name__ == '__main__':
     _parser = FCLParser()
     if len(sys.argv) == 1:  # No args, scan all examples
-        parse_dir(_parser, 'tests')
+        parse_dir(_parser, 'examples')
     else:  # Parse the given files:
         for fcl_filename in sys.argv[1:]:
             _parser.read_fcl_file(fcl_filename)

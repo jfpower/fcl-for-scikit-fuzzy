@@ -41,9 +41,19 @@ _IEEE_MF = {  # IEEE name: (fuzz-mf,  split-parameters?)
     'pointset':      (extramf.pointsetmf, False),
 }
 
+# jFuzzyLogic likes these names:
+_JFUZZYLOGIC_MF = {
+    'trian': (fuzzmf.trimf, False),
+    'trape': (fuzzmf.trapmf, False),
+    'gauss': (fuzzmf.gaussmf, True),
+    'gauss2': (fuzzmf.gauss2mf, True),
+    'gbell': (fuzzmf.gbellmf, True),
+    'sigm':  (extramf.jfl_sigmf, True),
+}
+
 # These are some other MFs I found, mostly from fuzzylite
 _FCL_MF = {  # FCL name: (fuzz-mf,  split-parameters?)
-    'bell':              (extramf.flbellmf, True),
+    'bell':              (extramf.fl_bellmf, True),
     'concave':           (extramf.concavemf, True),
     'cosine':            (extramf.cosinemf, True),
     'gaussianproduct':   (extramf.gaussprod, True),
@@ -60,7 +70,6 @@ _FCL_MF = {  # FCL name: (fuzz-mf,  split-parameters?)
     'zshape':            (fuzzmf.zmf, True),
 }
 
-
 # ################################
 # ### Defuzzification methods: ###
 # ################################
@@ -76,7 +85,8 @@ _IEEE_DEFUZZ = {
 }
 
 _FCL_DEFUZZ = {
-    'mm':    'mom',
+    'mm':  'mom',
+    'cogs': 'centroid',
     # 'cogs':  WeightedAverage, not implemented
     # 'cogss': WeightedSum, not implemented
 }
@@ -121,6 +131,20 @@ _FCL_OR = {
     'nmax':   tnorms.nilpotent(),
 }
 
+_JFUZZYLOGIC_AND = {
+    'dmin':    tnorms.drastic(),
+    'hamacher':  tnorms.hamacher(),
+    'nipmin': tnorms.nilpotent(),
+
+}
+
+_JFUZZYLOGIC_OR = {
+    'asum':   tnorms.product_sum(),  # 'algebraic sum'
+    'dmax':    tnorms.drastic(),
+    'einstein':  tnorms.einstein(),
+    'nipmax': tnorms.nilpotent(),
+}
+
 
 # ######################################
 # ### Class to map names to objects: ###
@@ -157,6 +181,11 @@ class NameMapper(object):
         self.defuzz_methods.update(_FCL_DEFUZZ)
         self.and_names.update(_FCL_AND)
         self.or_names.update(_FCL_OR)
+
+    def load_jfl_names(self):
+        self.known_mfs.update(_JFUZZYLOGIC_MF)
+        self.and_names.update(_JFUZZYLOGIC_AND)
+        self.or_names.update(_JFUZZYLOGIC_OR)
 
     def _report_error(self, msg, kind, pos=None):
         '''Simple error reporter (so override me)'''

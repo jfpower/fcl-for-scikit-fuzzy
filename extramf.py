@@ -10,6 +10,7 @@ import numpy as np
 import skfuzzy.membership as skmemb
 import scipy.interpolate as interp
 
+
 def singletonmf(x, xpt):
     ''' Find which x-val is nearest the given point, and set it to 1'''
     mf = np.zeros(len(x))
@@ -17,6 +18,7 @@ def singletonmf(x, xpt):
     idx = np.nonzero(diffs == diffs.min())[0][0]
     mf[idx] = 1
     return mf
+
 
 def pointsetmf(x, pointset, method='linear'):
     '''Interpolate from a point-set using the chosen interpolation method'''
@@ -37,15 +39,17 @@ def pointsetmf(x, pointset, method='linear'):
     elif method == 'spline':
         f = interp.make_interp_spline(px, py)
     elif method == 'cubic':
-        f = interp.CubicSpline(px,py,bc_type='natural')
+        f = interp.CubicSpline(px, py, bc_type='natural')
     # Sometimes interpoliation can go outside the bounds:
     return np.clip(f(x), 0, 1)
+
 
 def gaussprod(x, mean1, sigma1, mean2, sigma2):
     '''skfuzz expects the means to be given in order'''
     if mean1 > mean2:
         mean1, sigma1, mean2, sigma2 = mean2, sigma2, mean1, sigma1
     return skmemb.gauss2mf(x, mean1, sigma1, mean2, sigma2)
+
 
 def rectanglemf(x, a, b):
     '''Zero before and after given points, one in between'''
@@ -54,12 +58,14 @@ def rectanglemf(x, a, b):
     mf[np.nonzero(x > b)] = 0
     return mf
 
+
 def leftlinearmf(x, a, b):
     mf = np.ones(len(x))
     midpts = np.nonzero(np.logical_and(a < x, x < b))
     mf[midpts] = (((b - x[midpts]) / (b - a)))
     mf[np.nonzero(x >= b)] = 0
     return mf
+
 
 def rightlinearmf(x, a, b):
     mf = np.zeros(len(x))
@@ -68,14 +74,16 @@ def rightlinearmf(x, a, b):
     mf[np.nonzero(x >= b)] = 1
     return mf
 
+
 def rampmf(x, a, b):
     '''A ramp from a up/down to b (depending on the order of a and b)'''
     if a < b:
         return rightlinearmf(x, a, b)
     elif a > b:
         return leftlinearmf(x, b, a)
-    else: # a == b
+    else:  # a == b
         return np.zeros(len(x))
+
 
 def cosinemf(x, center, width):
     '''A cosine curve distributed about the given center'''
@@ -84,6 +92,7 @@ def cosinemf(x, center, width):
                                        x <= center + 0.5 * width))
     mf[midpts] = (0.5 * (1.0 + np.cos(2.0 / width * np.pi * (x[midpts] - center))))
     return mf
+
 
 def concavemf(x, infl, end):
     '''A curve rising/falling to end point, bent according to inflexion'''
@@ -96,11 +105,13 @@ def concavemf(x, infl, end):
         mf[decpts] = (infl - end) / (infl - 2.0 * end + x[decpts])
     return mf
 
+
 def leftgaussmf(x, mean, sigma):
     ''' Like Gaussian, but always 1 when <= mean'''
     mf = skmemb.gaussmf(x, mean, sigma)
     mf[np.nonzero(x <= mean)] = 1
     return mf
+
 
 def rightgaussmf(x, mean, sigma):
     ''' Like Gaussian, but always 1 when >= mean'''
@@ -108,19 +119,26 @@ def rightgaussmf(x, mean, sigma):
     mf[np.nonzero(x >= mean)] = 1
     return mf
 
+
 def spikemf(x, center, width):
-    '''fuzzylite supplies the parameters in a different order'''
+    '''a curved (exp) spike centered at the given location'''
     return np.exp(-np.abs(10.0 / width * (x - center)))
 
 
-def flbellmf(x, center, width, slope):
+def jfl_sigmf(x, gain, center):
+    '''jFuzzyLogic supplies the parameters in a different order'''
+    return skmemb.sigmf(x, center, gain)
+
+
+def fl_bellmf(x, center, width, slope):
     '''fuzzylite supplies the parameters in a different order'''
     return skmemb.gbellmf(x, width, slope, center)
 
 
-### Sanity check: plot some examples of the membership functions
+# ### Sanity check: plot some examples of the membership functions
 
 import matplotlib.pyplot as plt
+
 
 def visualise_all(x, y_list, titles, ncols=3):
     '''Just display the given plot-data on a grid of separate graphs'''
@@ -128,11 +146,12 @@ def visualise_all(x, y_list, titles, ncols=3):
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, 9))
     fig.tight_layout()
     fig.subplots_adjust(bottom=-.25)
-    for i,p in enumerate(y_list):
-        r,c = divmod(i, ncols)
+    for i, p in enumerate(y_list):
+        r, c = divmod(i, ncols)
         axes[r][c].plot(x, p)
         axes[r][c].set_title(titles[i])
         axes[r][c].set_ylim([-0.05, 1.05])  # so all have the same (0,1) y-axis
+
 
 def _plot_mf_for(x):
     '''Given the x-values, plot a series of example membership functions'''
@@ -165,8 +184,8 @@ def _plot_mf_for(x):
     ]
     # Now try some interpolation methods on these:
     for method in ['linear', 'lagrange', 'spline', 'cubic']:
-        tests.update([('{} ex{}'.format(method,i), pointsetmf(x, ps, method))
-                      for i,ps in enumerate(ps_tests)])
+        tests.update([('{} ex{}'.format(method, i), pointsetmf(x, ps, method))
+                      for i, ps in enumerate(ps_tests)])
     return tests
 
 
