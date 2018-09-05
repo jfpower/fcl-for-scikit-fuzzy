@@ -152,7 +152,7 @@ This is intended as a feature, not a bug.
 
 In particular:
   * Case is not relevant for keywords
-  (so `Rule`, `rule`, `RULE` are all the same)
+  (so `rule` and `RULE` are the same)
   but note that case _is_ relevant for identifiers (e.g. variable names).
   * The semi-colon at the end of lines can be left out in most cases.
   * The parser doesn't impose a strict ordering on the contents of 
