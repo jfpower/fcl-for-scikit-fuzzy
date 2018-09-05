@@ -3,7 +3,9 @@ An FCL parser with a scikit-fuzzy back-end
 
 This is a parser for the Fuzzy Control Language
 [FCL](https://en.wikipedia.org/wiki/Fuzzy_Control_Language)
-which has a back-end for `scikit-fuzzy`, a fuzzy logic toolkit for SciPy.
+along with a back-end for
+[scikit-fuzzy](https://github.com/scikit-fuzzy/scikit-fuzzy),
+a fuzzy logic toolkit for SciPy.
 
 The basic use-case is to parse a FCL file and then use the fuzzy rules
 in your `scikit-fuzzy` code.  For example:
@@ -113,9 +115,27 @@ I was doing this with an eye on the XML standard, hence the rather
 large selection of membership functions and norms.
 
 Most notably _not_ implemented (yet) are options for:
-  * activation methods (this is hard-wired to `MIN`)
-  * accumulation methods (this is hard-wired to `MAX`)
-  * default values for variables
+
+* activation method (this is hard-wired to `MIN`).
+
+  At the moment `scikit-fuzzy` doesn't have an option to change this;
+  its CrispValueCalculator always uses np.minimum.
+
+* accumulation method (this is hard-wired to `MAX`).
+
+  This is a small incompatibility: FCL sees the accumulation as a
+  property of the rule-base, whereas `scikit-fuzzy` sees it as a
+  property of the output variables.  I could fix the parser to
+  propagate the setting from the rules to the variables used in those
+  rules, but this might cause unexpected behaviour if the variables
+  are used in more than one rule base.
+  
+  * default values for variables.
+
+  In FCL these values are used in defuzzification when all the
+  memberships have been cut to zero area.  As far as I can see this
+  case will raise an exception in `scikit-fuzzy`.
+  
 
 The parser accepts these, I just haven't figured out how to get them
 into the `scikit-fuzzy` code, so they are ignored for the moment.
