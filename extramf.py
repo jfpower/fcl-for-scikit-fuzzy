@@ -28,9 +28,9 @@ def pointsetmf(x, pointset, method='linear'):
     # Lead on left from y=0, unless otherwise specified:
     if pointset[0][0] > x_min:
         pointset = [(x_min, 0)] + pointset
-    # Trail on right to y=1, unless otherwise specified:
+    # Trail on right to last given y value
     if pointset[-1][0] < x_max:
-        pointset = pointset + [(x_max, 1)]
+        pointset = pointset + [(x_max, pointset[-1][1])]
     px, py = [p[0] for p in pointset], [p[1] for p in pointset]
     if method == 'linear':
         f = interp.interp1d(px, py)
