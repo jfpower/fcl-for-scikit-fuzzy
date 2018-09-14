@@ -17,6 +17,7 @@ import skfuzzy.control as ctrl
 import skfuzzy.control.term as fuzzterm
 
 import extramf
+import hedges
 import tnorms
 
 # ############################
@@ -100,49 +101,49 @@ _FCL_DEFUZZ = {
 # that is, you get both and/or when you lookup either one of them.
 
 _IEEE_AND = {
-    'min':    tnorms.min_max(),
-    'prod':   tnorms.product_sum(),
-    'bdif':   tnorms.bounded(),
-    'drp':    tnorms.drastic(),
-    'eprod':  tnorms.einstein(),
-    'hprod':  tnorms.hamacher(),
-    'nilmin': tnorms.nilpotent(),
+    'min':    tnorms.MIN_MAX,
+    'prod':   tnorms.PRODUCT_SUM,
+    'bdif':   tnorms.BOUNDED,
+    'drp':    tnorms.DRASTIC,
+    'eprod':  tnorms.EINSTEIN,
+    'hprod':  tnorms.HAMACHER,
+    'nilmin': tnorms.NILPOTENT,
 }
 
 _IEEE_OR = {
-    'max':    tnorms.min_max(),
-    'probor': tnorms.product_sum(),
-    'bsum':   tnorms.bounded(),
-    'drs':    tnorms.drastic(),
-    'esum':   tnorms.einstein(),
-    'hsum':   tnorms.hamacher(),
-    'nilmax': tnorms.nilpotent(),
+    'max':    tnorms.MIN_MAX,
+    'probor': tnorms.PRODUCT_SUM,
+    'bsum':   tnorms.BOUNDED,
+    'drs':    tnorms.DRASTIC,
+    'esum':   tnorms.EINSTEIN,
+    'hsum':   tnorms.HAMACHER,
+    'nilmax': tnorms.NILPOTENT,
 }
 
 _FCL_AND = {
-    'dprod':  tnorms.drastic(),
-    'nmin':   tnorms.nilpotent(),
+    'dprod':  tnorms.DRASTIC,
+    'nmin':   tnorms.NILPOTENT,
 }
 
 _FCL_OR = {
-    'asum':   tnorms.product_sum(),  # 'algebraic sum'
-    'dsum':   tnorms.drastic(),
+    'asum':   tnorms.PRODUCT_SUM,  # 'algebraic sum'
+    'dsum':   tnorms.DRASTIC,
     # 'nsum' is not implemented
-    'nmax':   tnorms.nilpotent(),
+    'nmax':   tnorms.NILPOTENT,
 }
 
 _JFUZZYLOGIC_AND = {
-    'dmin':    tnorms.drastic(),
-    'hamacher':  tnorms.hamacher(),
-    'nipmin': tnorms.nilpotent(),
+    'dmin':    tnorms.DRASTIC,
+    'hamacher':  tnorms.HAMACHER,
+    'nipmin': tnorms.NILPOTENT,
 
 }
 
 _JFUZZYLOGIC_OR = {
-    'asum':   tnorms.product_sum(),  # 'algebraic sum'
-    'dmax':    tnorms.drastic(),
-    'einstein':  tnorms.einstein(),
-    'nipmax': tnorms.nilpotent(),
+    'asum':   tnorms.PRODUCT_SUM,  # 'algebraic sum'
+    'dmax':    tnorms.DRASTIC,
+    'einstein':  tnorms.EINSTEIN,
+    'nipmax': tnorms.NILPOTENT,
 }
 
 
@@ -162,8 +163,9 @@ class NameMapper(object):
         '''
         self.known_mfs = {}       # Membership functions
         self.defuzz_methods = {}  # Defuzzification methods
-        self.and_names = {}       # And function to be used in rules
-        self.or_names = {}        # Or function to be used in rules
+        self.and_names = {}       # And function (to be applied in rules)
+        self.or_names = {}        # Or function (to be applied in rules)
+        self.hedge_names = {}     # Hedge functions that can be used in rules
 
     def load_ieee_names(self):
         '''Load in the names used by the IEEE (XML) standard'''
@@ -171,6 +173,7 @@ class NameMapper(object):
         self.defuzz_methods.update(_IEEE_DEFUZZ)
         self.and_names.update(_IEEE_AND)
         self.or_names.update(_IEEE_OR)
+        self.hedge_names.update(hedges._IEEE_HEDGES)
 
     def load_fcl_names_too(self):
         '''
@@ -208,6 +211,31 @@ class NameMapper(object):
             return self.defuzz_methods[df_name.lower()]
         else:
             self._unsupported('defuzzify method "{}"'.format(df_name))
+
+    def translate_accu(self, accu_name):
+        '''
+            Translate a given accumulation method to its skfuzzy name.
+            Use skfuzzy for max/prod, otherwise select a co-norm.
+        '''
+        # First check for teh built-ins:
+        if accu_name.lower() == 'max':
+            return ctrl.accumulation_max
+        elif accu_name.lower() == 'prod':
+            return ctrl.accumulation_prod
+        elif accu_name.lower() in self.or_names:
+            return self.or_names[accu_name.lower()].or_func
+        else:
+            self._unsupported('accumulation method "{}"'.format(accu_name))
+
+    def translate_hedge(self, hedge_name):
+        '''
+            Find the named hedge function, and return the function itself.
+
+        '''
+        if hedge_name.lower() in self.hedge_names:
+            return self.hedge_names[hedge_name.lower()]
+        else:
+            self._unsupported('hedge function "{}"'.format(hedge_name))
 
     def translate_and_or(self, and_name, or_name):
         '''
@@ -248,8 +276,16 @@ class SymbolTable(object):
         self.fb_name = None   # Name of function block (if any in file)
         self.variables = OrderedDict()   # Map variable label to FuzzyVariable
         self.all_rules = OrderedDict()   # Map rule label to Rule object
+        self.error_on_redefine = False
         if varlist:
             self.add_vars(varlist)
+
+    def flag_error_on_redefine(self):
+        '''
+            Signal an error if var or rule is redefined.
+            Probably want to set this for files, but not for interactive use.
+        '''
+        self.error_on_redefine = True
 
     def clear(self):
         ''' Empty all items in the symbol table'''
@@ -261,15 +297,25 @@ class SymbolTable(object):
         '''Simple error reporter (so override me)'''
         assert False, '{}: {}'.format(kind, msg)
 
+    def add_var(self, fvar):
+        '''
+            Add a variables to the set of those known to us.
+            Will potentially overwrite any previous variables with this name.
+        '''
+        assert isinstance(fvar, fuzzvar.FuzzyVariable),\
+            '{} should be a variable'.format(fvar)
+        if self.error_on_redefine and fvar.label in self.variables:
+            self._report_error('variable "{}"'.format(fvar.label),
+                               'redefinition error')
+        self.variables[fvar.label] = fvar
+
     def add_vars(self, varlist):
         '''
             Add these variables to the set of those known to us.
             Will overwrite any previous variables with these names.
         '''
         for fvar in varlist:
-            assert isinstance(fvar, fuzzvar.FuzzyVariable),\
-                '{} should be a variable'.format(fvar)
-            self.variables[fvar.label] = fvar
+            self.add_var(fvar)
 
     def get_var_defn(self, varname):
         '''
@@ -279,6 +325,23 @@ class SymbolTable(object):
             self._report_error('Variable "{}" not found'.format(varname),
                                'scope error')
         return self.variables[varname]
+
+    def is_input_var(self, varname):
+        '''Return true iff this varaible has been decared as input/fuzzy'''
+        return varname in self.variables and \
+            isinstance(self.variables[varname], ctrl.Antecedent)
+
+    def is_output_var(self, varname):
+        '''Return true iff this varaible has been decared as output/defuzzy'''
+        return varname in self.variables and \
+            isinstance(self.variables[varname], ctrl.Consequent)
+
+    def add_term_to_var(self, fvar, fterm):
+        if self.error_on_redefine and fterm.label in fvar.terms:
+            self._report_error('term "{}" of variable "{}"'
+                               .format(fterm.label, fvar.label),
+                               'redefinition error')
+        fvar[fterm.label] = fterm
 
     @property
     def antecedents(self):
@@ -307,10 +370,13 @@ class SymbolTable(object):
     def add_rule(self, rule):
         '''
             Add this rule to the list of those known to us.
-            Will overwrite any previous rule with the same label.
+            Will potentially overwrite any previous rule with the same label.
         '''
         assert isinstance(rule, ctrl.Rule),\
             '{} should be a rule object'.format(rule)
+        if self.error_on_redefine and rule.label in self.all_rules:
+            self._report_error('rule "{}"'.format(rule.label),
+                               'redefinition error')
         self.all_rules[rule.label] = rule
         return rule
 
@@ -318,7 +384,7 @@ class SymbolTable(object):
         '''
             Changing the rule label has consequences for our dict,
             so use this method rather than setting it directly.
-            Will overwrite any previous rule with the same label.
+            Will potentially overwrite any previous rule with the same label.
         '''
         # Remove the old-labelled version, if there is one:
         self.all_rules.pop(rule.label, None)

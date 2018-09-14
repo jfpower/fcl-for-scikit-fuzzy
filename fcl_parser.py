@@ -27,6 +27,9 @@ import skfuzzy.control.term as fuzzterm
 from fcl_scanner import BufferedFCLLexer
 from fcl_symbols import NameMapper, SymbolTable
 
+# A universe is given this no. of points unless specified:
+_DEFAULT_UNIVERSE_SIZE = 1000
+
 
 class ParsingError(Exception):
     '''The parser raises this to flag an error while parsing an FCL file.'''
@@ -39,7 +42,7 @@ class ParsingError(Exception):
 class FCLParser(NameMapper, SymbolTable):
     '''
         A top-down parser for the Fuzzy Control Language (FCL).
-        Main entry point is fcl_file with a filename, or you can call
+        The main entry point is fcl_file with a filename, or you can call
         any non-terminal with a string.
 
         The relationship with NameMapper and SymbolTable should
@@ -70,18 +73,19 @@ class FCLParser(NameMapper, SymbolTable):
             msg += ' while reading token "{}"'.format(got)
         raise ParsingError(pos, error_kind, msg)
 
-    def _calc_universe(self, lo, hi, numpoints=None):
+    def _calc_universe(self, start, stop, step=None):
         '''
             Return an np array corresponding to the given RANGE bounds.
-            Optionally specify the number of points, otherwise we guess.
+            Optionally specify the step, otherwise we guess.
         '''
-        if lo >= hi:
-            self._report_error('invalid range bounds ({}, {})'.format(lo, hi))
-        if numpoints:
-            universe = np.arange(lo, hi, numpoints)
-        else:  # Guess some "reasonable" granularity:
-            numpoints = min(1 + (hi - lo), 256)
-            universe = np.linspace(lo, hi, numpoints)
+        if start >= stop:
+            self._report_error('invalid range bounds ({}, {})'
+                               .format(start, stop))
+        if not step:  # Guess some "reasonable" step:
+            urange = 1 + (stop - start)
+            scale_by = urange / _DEFAULT_UNIVERSE_SIZE
+            step = np.power(10, np.round(np.log10(scale_by), 0))
+        universe = np.arange(start, stop, step)
         return universe
 
     def _make_mf(self, universe, mfunc, params):
@@ -97,15 +101,28 @@ class FCLParser(NameMapper, SymbolTable):
             return skfunc(universe, params)
 
     def _finalise_ante_var(self, universe, varname):
+        '''
+            Have just finished an input var definition, so add it to the list.
+        '''
         fuzzyvar = ctrl.Antecedent(universe, varname)
         self.add_vars([fuzzyvar])
         return fuzzyvar
 
     def _finalise_cons_var(self, universe, varname, options):
+        '''
+            Have just finished an output var definition, so add it to the list.
+            Make sure any declared options (e.g. defuzz method) are registered.
+            Default values are ignored at the moment.
+        '''
         fuzzyvar = ctrl.Consequent(universe, varname)
         for key, val in options.items():
+            key = key.upper()
             if key == 'METHOD':
                 fuzzyvar.defuzzify_method = self.translate_defuzz(val)
+            elif key == 'ACCU':
+                fuzzyvar.accumulation_method = self.translate_accu(val)
+            elif key == 'DEFAULT':
+                pass
         self.add_vars([fuzzyvar])
         return fuzzyvar
 
@@ -120,12 +137,34 @@ class FCLParser(NameMapper, SymbolTable):
                 (term_name, fname, params) = term
                 mf_def = self._make_mf(universe, fname, params)
                 term = fuzzterm.Term(term_name, mf_def)
-            fuzzyvar[term.label] = term
+            self.add_term_to_var(fuzzyvar, term)
+
+    def _add_hedges(self, fvar, hedges, membfun):
+        '''
+            Apply one or more hedge functions to the variable's member func.
+            Create a new mf for the overall result, and add it to the variable.
+            Return the term corresponding to this new membership function.
+        '''
+        if len(hedges) == 0:
+            return membfun
+        mf_name = '_{}_{}'.format('_'.join(hedges), membfun)
+        if mf_name in fvar.terms:  # Already done it (some previous rule)
+            return fvar[mf_name]
+        mf_vals = fvar[membfun].mf
+        # Now apply each hedge in turn, starting at the last one:
+        for hedge_name in hedges[::-1]:
+            hedge_func = self.translate_hedge(hedge_name)
+            mf_vals = hedge_func(mf_vals)
+        # All the hedges processed, so add this as a new mf to the variable:
+        fvar[mf_name] = mf_vals
+        return fvar[mf_name]
 
     def _finalise_rules(self, rbname, rulelist, options):
         '''
-            Propagate any ruleblock option-values to individual rules.
             Prefix the rule labels by the ruleblock name (if any).
+            Propagate any ruleblock AND/OR option-values to individual rules.
+            Ignoring any ACCU option here, since skfuzzy does this at the
+            variable level & could have same variable in different rule-blocks.
         '''
         and_key = options.get('AND', None)
         or_key = options.get('OR', None)
@@ -133,8 +172,8 @@ class FCLParser(NameMapper, SymbolTable):
         for rule in rulelist:
             if rbname:
                 self.set_rule_label(rule, '{}.{}'.format(rbname, rule.label))
-                rule.and_func = fam.and_func
-                rule.or_func = fam.or_func
+            rule.and_func = fam.and_func
+            rule.or_func = fam.or_func
         return rulelist
 
     def read_fcl_file(self, filename):
@@ -143,6 +182,7 @@ class FCLParser(NameMapper, SymbolTable):
             Returns the parser object, to facilitate create-and-call.
         '''
         self.lex.reset_lineno(filename)
+        self.flag_error_on_redefine()
         with codecs.open(filename, 'r',
                          encoding='utf-8', errors='ignore') as fileh:
             try:
@@ -163,7 +203,10 @@ class FCLParser(NameMapper, SymbolTable):
     # all can be called wiht a string (and will parse that string)
     # and (nearly) all return an corresponding fuzzy object.
 
-    # 1. Overall FCL program structure:
+    # ################################# #
+    # 1. Overall FCL program structure: #
+    # ################################# #
+
     def function_block(self, input_string=None):
         '''
             This is the grammar's start symbol.
@@ -225,7 +268,9 @@ class FCLParser(NameMapper, SymbolTable):
         self.lex.recognise('END_OPTION')
         return None  # Just for emphasis
 
-    # 2. Fuzzy variables:
+    # ################### #
+    # 2. Fuzzy variables: #
+    # ################### #
 
     def _option_def(self, keyword):
         '''
@@ -339,7 +384,9 @@ class FCLParser(NameMapper, SymbolTable):
         self.lex.recognise_if_there('SEMICOLON')
         return self._calc_universe(rmin, rmax, numpoints)
 
-    # 3. Fuzzy terms (membership functions):
+    # ###################################### #
+    # 3. Fuzzy terms (membership functions): #
+    # ###################################### #
 
     def term_def(self, input_string=None):
         '''
@@ -404,7 +451,9 @@ class FCLParser(NameMapper, SymbolTable):
             plist.append((x_val, y_val))
         return plist
 
-    # 4. Fuzzy rules:
+    # ####################### #
+    # ### 4. Fuzzy rules: ### #
+    # ####################### #
 
     def rule_block(self, input_string=None):
         '''
@@ -507,49 +556,57 @@ class FCLParser(NameMapper, SymbolTable):
             Return a list of these.
         '''
         self.lex.maybe_set_input(input_string)
-        clist = [self.clause()]
+        clist = [self.clause(parent_rule=self.consequent)]
         while self.lex.peek_some(['COMMA', 'AND']):
             self.lex.recognise_some(['COMMA', 'AND'])
-            clist.append(self.clause())
+            clist.append(self.clause(parent_rule=self.consequent))
         return clist
 
     def clause(self, input_string=None, parent_rule=None):
         '''
             clause ::=
-                | variable_name   # Not doing this!
-                | variable_name 'IS' {hedge} term_name
-                | 'NOT' '(' clause() ')'
-                | '(' clause() ')'  # Allow extra parentheses
-            The optional hedge is any identifier or 'NOT'.
+                | 'NOT' condition()
+                | '(' condition() ')'   # Allow extra parentheses
+                | atomic_clause
+            The syntax has been loosened to permit more flexible expressions;
+            These are the same: 'NOT v IS t', 'v IS NOT t', 'NOT(v IS t')
         '''
+        # Note that the parent (caller) might be antecedent or consequent
+        # We pass it as a parameter so we can call it for sub-clauses.
         self.lex.maybe_set_input(input_string)
         if self.lex.recognise_if_there('NOT'):
-            # self.lex.recognise('LPAREN')
-            subclause = parent_rule() if parent_rule else self.clause()
-            # self.lex.recognise('RPAREN')
+            subclause = self.clause(parent_rule=parent_rule)
             return fuzzterm.TermAggregate(subclause, None, 'not')
-        if self.lex.recognise_if_there('LPAREN'):
+        elif self.lex.recognise_if_there('LPAREN'):
             subclause = parent_rule() if parent_rule else self.clause()
             self.lex.recognise('RPAREN')
             return subclause
-        # else: variable_name 'IS' {hedge} term_name
+        else:
+            in_consequent = (parent_rule == self.consequent)
+            return self.atomic_clause(in_consequent=in_consequent)
+
+    def atomic_clause(self, input_string=None, in_consequent=False):
+        '''
+            atomic_clause ::=
+                | variable_name   # Not doing this!
+                | variable_name 'IS' {hedge} term_name
+            The optional hedges are: any identifier or 'NOT'.
+        '''
         varname = self.lex.recognise('IDENTIFIER')
         hedges = []
-        seen_not = False
         self.lex.recognise('IS')
         while self.lex.peek_some(['IDENTIFIER', 'NOT']):
-            if self.lex.recognise_if_there('NOT'):
-                seen_not = True
-            else:
-                hedges.append(self.lex.recognise('IDENTIFIER'))
-        # Actually, the last one was the member function name
+            hedges.append(self.lex.recognise_some(['IDENTIFIER', 'NOT']))
+        # Actually, the last one was the member function name:
         membfun = hedges.pop()
-        if len(hedges) > 0:
-            self._unsupported('hedge modifier {}'.format(hedges))
         fvar = self.get_var_defn(varname)
         this_clause = fvar[membfun]
-        if seen_not:
+        # Special case when the only hedge is 'not':
+        if len(hedges) == 1 and hedges[0] == 'NOT':
             this_clause = fuzzterm.TermAggregate(this_clause, None, 'not')
+        # Otherwise apply the hedge functions, if there are any:
+        elif len(hedges) > 0:
+            this_clause = self._add_hedges(fvar, hedges, membfun)
         return this_clause
 
     def ident_or_number(self, input_string=None):
@@ -610,7 +667,7 @@ def parse_dir(parser, rootdir, want_output=False):
 if __name__ == '__main__':
     _parser = FCLParser()
     if len(sys.argv) == 1:  # No args, scan all examples
-        parse_dir(_parser, 'examples')
+        parse_dir(_parser, 'Examples')
     else:  # Parse the given files:
         for fcl_filename in sys.argv[1:]:
             _parser.read_fcl_file(fcl_filename)

@@ -71,7 +71,7 @@ p.add_vars([food, service, tip])
 # Now use FCL to define three rules:
 rule1 = p.rule('IF quality is poor OR service is poor THEN tip is bad')
 rule2 = p.rule('IF service is average THEN tip is middling')
-rule3 = p.rule('IF service is good OR quality is good tHEN tip is lots')
+rule3 = p.rule('IF service is good OR quality is good THEN tip is lots')
 
 # To get the control system, just add the rules (from the parser):
 tipping = ctrl.ControlSystem(p.rules)
@@ -114,6 +114,24 @@ At the moment the main options are for:
 I was doing this with an eye on the XML standard, hence the rather
 large selection of membership functions and norms.
 
+
+I've also implemented the *hedge functions* listed in the IEEE standard,
+so you can write things like:
+
+```python
+rule1 = p.rule('IF quality is slightly poor OR service is very poor THEN tip is extremely bad')
+```
+
+What happens here is that when the rule is processed, the hedge
+functions are applied to the corresponding membership function, and a
+new membership function is generated and added to the variable.  For
+example, a membership function called `_slightly_poor` would be added
+to the variable `quality` above.
+
+
+What's not implemented
+------------------
+
 Most notably _not_ implemented (yet) are options for:
 
 * activation method (this is hard-wired to `MIN`).
@@ -121,7 +139,7 @@ Most notably _not_ implemented (yet) are options for:
   At the moment `scikit-fuzzy` doesn't have an option to change this;
   its CrispValueCalculator always uses np.minimum.
 
-* accumulation method (this is hard-wired to `MAX`).
+* accumulation method (well, not exactly).
 
   This is a small incompatibility: FCL sees the accumulation as a
   property of the rule-base, whereas `scikit-fuzzy` sees it as a
@@ -129,7 +147,11 @@ Most notably _not_ implemented (yet) are options for:
   propagate the setting from the rules to the variables used in those
   rules, but this might cause unexpected behaviour if the variables
   are used in more than one rule base.
-  
+
+  You can set an 'ACCU' option as part of an (output) variable
+  definition, and this will be propagated through to `scikit-fuzzy`.
+
+
 * default values for variables.
 
   In FCL these values are used in defuzzification when all the
@@ -211,10 +233,9 @@ membership functions (that are not in `scikit-fuzzy`) are defined in
 [extramf.py](./extramf.py)
 and the t-norms and their duals are defined in
 [norms.py](./norms.py).
-I implemented some hedge functions in
-[hedges.py](./hedges.py)
-but I haven't figured
-out how to integrate these in to the system yet.
+The set of hedge functions as defined in the IEEE standard is implemented in
+[hedges.py](./hedges.py).
+
 
 
 [James Power](http://www.cs.nuim.ie/~jpower/),

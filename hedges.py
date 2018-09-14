@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-
-@author: james.power@mu.ie Created on Wed Aug  1 14:14:46 2018
-Based on Annex A if the IEEE 1855-2016 standard
+    Hedge functions, based on the definitions in the IEEE standard.
+    Each function here maps a mf to a new mf.
+    I'm following Annex A in IEEE 1855-2016, definintions A.1-A.13.
+    @author: james.power@mu.ie Created on Wed Aug  1 14:14:46 2018
 """
 
 # Each hedge takes a membership function and modifies it,
 # returning a 'hedged' membership function of the same size.
 
-# Two of these (above/below) need the x-values also.
 
 import numpy as np
 import skfuzzy.membership as skmemb
 import extramf
 
 
-def above(x, mf):
+def above(mf):
     ''' A.1: above(mf)=0 if x<x_max, 1-mf if x>= x_max; cf below'''
-    x_max = x.max()
+    max_pos = np.argmax(mf)
     new_mf = 1 - mf
-    new_mf[np.nonzero(x < x_max)] = 0
+    new_mf[:max_pos] = 0
     return new_mf
 
 
@@ -28,11 +28,11 @@ def any_of(mf):
     return np.ones_like(mf)
 
 
-def below(x, mf):
+def below(mf):
     '''A.3: below(mf) = 0 if x>x_max, 1-mf(x) if x<x_max; cf above'''
-    x_max = x.max()
+    max_pos = np.argmax(mf)
     new_mf = 1 - mf
-    new_mf[np.nonzero(x > x_max)] = 0
+    new_mf[max_pos:] = 0
     return new_mf
 
 
@@ -100,39 +100,35 @@ def very(mf):
     return mf ** 2
 
 
-# List of all hedges, maps name to function and 'takes-x' flag
-all_hedges = {
-    'above':        (above, True),
-    'any':          (any_of, False),
-    'below':        (below, True),
-    'extremely':    (extremely, False),
-    'intensify':    (intensify, False),
-    'more_or_less': (more_or_less, False),
-    'norm':         (norm, False),
-    'not':          (is_not, False),
-    'plus':         (plus, False),
-    'seldom':       (seldom, False),
-    'slightly':     (slightly, False),
-    'somewhat':     (somewhat, False),
-    'very':         (very, False),
+# List of all hedges, maps name to function
+_IEEE_HEDGES = {
+    'above':        above,
+    'any':          any_of,
+    'below':        below,
+    'extremely':    extremely,
+    'intensify':    intensify,
+    'more_or_less': more_or_less,
+    'norm':         norm,
+    'not':          is_not,
+    'plus':         plus,
+    'seldom':       seldom,
+    'slightly':     slightly,
+    'somewhat':     somewhat,
+    'very':         very,
 }
 
 
-def test_all_hedges(x, y):
+def test_all_hedges(y):
     results = []
     hedgenames = sorted(all_hedges.keys())  # Want them in alphabetical order
     for name in hedgenames:
-        func, takes_x = all_hedges[name]
-        if takes_x:
-            results.append(func(x, y))
-        else:
-            results.append(func(y))
+        func = all_hedges[name]
+        results.append(func(y))
     return (hedgenames, results)
 
 
 if __name__ == '__main__':
     x = np.arange(0, 100)
-    y = skmemb.gaussmf(x, 50, 20)
-    (titles, data) = test_all_hedges(x, y)
+    y = skmemb.gaussmf(x, 50, 15)
+    (titles, data) = test_all_hedges(y)
     extramf.visualise_all(x, [y]+data, ['original (gaussian)']+titles)
-
